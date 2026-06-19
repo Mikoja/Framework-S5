@@ -1,0 +1,5 @@
+cd "/home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework"
+mvn install
+
+cd "../test-project"
+mvn package

@@ -5,6 +5,11 @@
 
   <display-name>Test Project</display-name>
 
+  <context-param>
+    <param-name>controllerPackage</param-name>
+    <param-value>com.test.controllers</param-value>
+  </context-param>
+
   <servlet>
     <servlet-name>frontController</servlet-name>
     <servlet-class>framework.FrontControllerServlet</servlet-class>
