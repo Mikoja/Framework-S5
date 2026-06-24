@@ -56,7 +56,7 @@ public class FrontControllerServlet extends HttpServlet {
                 ControllerListingRenderer.render(resp.getWriter(), routeRegistry, req.getContextPath());
                 return;
             }
-            writeMatchedRoute(resp, req, route.get());
+            invokeAndWriteResult(resp, req, route.get());
             return;
         }
 
@@ -66,11 +66,55 @@ public class FrontControllerServlet extends HttpServlet {
             return;
         }
 
-        writeNotFound(resp, req, method, path);
+        writeUnknownUrl(resp, req, method, path);
     }
 
     public RouteRegistry getRouteRegistry() {
         return routeRegistry;
+    }
+
+    private void invokeAndWriteResult(HttpServletResponse resp, HttpServletRequest req, RouteMapping route) throws IOException {
+        try {
+            Object controller = route.controllerClass().getDeclaredConstructor().newInstance();
+            Object result = route.handlerMethod().invoke(controller);
+
+            resp.getWriter().write("<p><a href=\"" + escapeHtml(req.getContextPath() + "/") + "\">Accueil</a></p>");
+            resp.getWriter().write("<p>Contrôleur : " + escapeHtml(route.controllerClass().getSimpleName()) + "</p>");
+            resp.getWriter().write("<p>Méthode : " + escapeHtml(route.handlerMethod().getName()) + "</p>");
+            resp.getWriter().write("<p>URL : " + escapeHtml(route.httpMethod() + " " + route.path()) + "</p>");
+            resp.getWriter().write("<p>Résultat : " + escapeHtml(String.valueOf(result)) + "</p>");
+        } catch (Exception e) {
+            LOGGER.severe(() -> "Erreur lors de l'invocation de " + route.handlerMethod().getName() + " : " + e.getMessage());
+            resp.getWriter().write("<p>Erreur lors de l'exécution de la méthode : " + escapeHtml(e.getMessage()) + "</p>");
+        }
+    }
+
+    private void writeUnknownUrl(HttpServletResponse resp, HttpServletRequest req, String method, String path) throws IOException {
+        resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+        resp.getWriter().write("<p>URL inconnue : " + escapeHtml(method + " " + path) + "</p>");
+        resp.getWriter().write("<p>Voici les URLs disponibles :</p><ul>");
+        for (RouteMapping route : routeRegistry.getAllRoutes()) {
+            resp.getWriter().write("<li>");
+            if ("GET".equals(route.httpMethod())) {
+                resp.getWriter().write("<a href=\"" + escapeHtml(buildUrl(req.getContextPath(), route.path())) + "\">");
+                resp.getWriter().write(escapeHtml(route.httpMethod() + " " + route.path()));
+                resp.getWriter().write("</a>");
+            } else {
+                resp.getWriter().write(escapeHtml(route.httpMethod() + " " + route.path()));
+            }
+            resp.getWriter().write("</li>");
+        }
+        resp.getWriter().write("</ul>");
+        resp.getWriter().write("<p><a href=\"" + escapeHtml(req.getContextPath() + "/") + "\">Accueil</a></p>");
+    }
+
+    private void writeMethodNotAllowed(HttpServletResponse resp, String method, String path, List<RouteMapping> routes) throws IOException {
+        resp.setStatus(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+        resp.getWriter().write("<p>405 — " + escapeHtml(method + " " + path) + " non autorisé</p><ul>");
+        for (RouteMapping route : routes) {
+            resp.getWriter().write("<li>" + escapeHtml(route.httpMethod() + " " + route.path()) + "</li>");
+        }
+        resp.getWriter().write("</ul>");
     }
 
     private String extractPath(HttpServletRequest req) {
@@ -88,32 +132,12 @@ public class FrontControllerServlet extends HttpServlet {
         return path;
     }
 
-    private void writeMatchedRoute(HttpServletResponse resp, HttpServletRequest req, RouteMapping route) throws IOException {
-        resp.getWriter().write("<p><a href=\"" + escapeHtml(req.getContextPath() + "/") + "\">Accueil</a></p>");
-        resp.getWriter().write("<p>" + escapeHtml(route.httpMethod() + " " + route.path()) + "</p>");
-
-        if ("GET".equals(route.httpMethod())) {
-            boolean hasPostRoute = routeRegistry.findByPath(route.path()).stream()
-                    .anyMatch(candidate -> "POST".equals(candidate.httpMethod()));
-            if (hasPostRoute) {
-                resp.getWriter().write("<form method=\"post\"><button type=\"submit\">POST</button></form>");
-            }
+    private String buildUrl(String contextPath, String path) {
+        String base = contextPath == null ? "" : contextPath;
+        if ("/".equals(path)) {
+            return base.isEmpty() ? "/" : base + "/";
         }
-    }
-
-    private void writeMethodNotAllowed(HttpServletResponse resp, String method, String path, List<RouteMapping> routes) throws IOException {
-        resp.setStatus(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
-        resp.getWriter().write("<p>405 — " + escapeHtml(method + " " + path) + " non autorisé</p><ul>");
-        for (RouteMapping route : routes) {
-            resp.getWriter().write("<li>" + escapeHtml(route.httpMethod() + " " + route.path()) + "</li>");
-        }
-        resp.getWriter().write("</ul>");
-    }
-
-    private void writeNotFound(HttpServletResponse resp, HttpServletRequest req, String method, String path) throws IOException {
-        resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-        resp.getWriter().write("<p>404 — " + escapeHtml(method + " " + path) + " introuvable</p>");
-        resp.getWriter().write("<p><a href=\"" + escapeHtml(req.getContextPath() + "/") + "\">Accueil</a></p>");
+        return base + path;
     }
 
     private String escapeHtml(String value) {

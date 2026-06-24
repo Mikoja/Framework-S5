@@ -5,6 +5,7 @@ import framework.annotations.Delete;
 import framework.annotations.Get;
 import framework.annotations.Post;
 import framework.annotations.Put;
+import framework.annotations.UrlMapping;
 
 import java.io.IOException;
 import java.lang.annotation.Annotation;
@@ -40,10 +41,17 @@ public class ControllerScanner {
         String basePath = normalizePath(controllerAnnotation.value());
 
         for (Method method : controllerClass.getDeclaredMethods()) {
-            registerMapping(registry, controllerClass, method, basePath, Get.class, "GET", Get::value);
-            registerMapping(registry, controllerClass, method, basePath, Post.class, "POST", Post::value);
-            registerMapping(registry, controllerClass, method, basePath, Put.class, "PUT", Put::value);
-            registerMapping(registry, controllerClass, method, basePath, Delete.class, "DELETE", Delete::value);
+            if (method.isAnnotationPresent(UrlMapping.class)) {
+                UrlMapping mapping = method.getAnnotation(UrlMapping.class);
+                String path = combinePaths(basePath, mapping.value());
+                RouteMapping route = new RouteMapping("GET", path, controllerClass, method);
+                registry.register(route);
+            } else {
+                registerMapping(registry, controllerClass, method, basePath, Get.class, "GET", Get::value);
+                registerMapping(registry, controllerClass, method, basePath, Post.class, "POST", Post::value);
+                registerMapping(registry, controllerClass, method, basePath, Put.class, "PUT", Put::value);
+                registerMapping(registry, controllerClass, method, basePath, Delete.class, "DELETE", Delete::value);
+            }
         }
     }
 
