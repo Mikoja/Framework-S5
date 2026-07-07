@@ -44,7 +44,8 @@ public class ControllerScanner {
             if (method.isAnnotationPresent(UrlMapping.class)) {
                 UrlMapping mapping = method.getAnnotation(UrlMapping.class);
                 String path = combinePaths(basePath, mapping.value());
-                RouteMapping route = new RouteMapping("GET", path, controllerClass, method);
+                String httpMethod = mapping.method().toUpperCase();
+                RouteMapping route = new RouteMapping(httpMethod, path, controllerClass, method);
                 registry.register(route);
             } else {
                 registerMapping(registry, controllerClass, method, basePath, Get.class, "GET", Get::value);
