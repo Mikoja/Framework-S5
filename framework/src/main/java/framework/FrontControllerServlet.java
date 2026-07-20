@@ -1,7 +1,10 @@
 package framework;
 
+import framework.ioc.ApplicationContext;
 import framework.model.Model;
 import framework.model.ModelAndView;
+import framework.persistence.ConnectionFactory;
+import framework.persistence.DatabaseConfig;
 import framework.routing.ControllerScanner;
 import framework.routing.RouteMapping;
 import framework.routing.RouteRegistry;
@@ -26,6 +29,8 @@ public class FrontControllerServlet extends HttpServlet {
 
     private RouteRegistry routeRegistry;
     private ViewResolver viewResolver;
+    private ApplicationContext applicationContext;
+    private ConnectionFactory connectionFactory;
 
     @Override
     public void init() throws ServletException {
@@ -38,11 +43,26 @@ public class FrontControllerServlet extends HttpServlet {
             throw new ServletException("Le paramètre controllerPackage doit être configuré dans web.xml");
         }
 
+        String repositoryPackage = getServletContext().getInitParameter("repositoryPackage");
+
         String prefix = getServletContext().getInitParameter("viewPrefix");
         String suffix = getServletContext().getInitParameter("viewSuffix");
         viewResolver = new ViewResolver(prefix, suffix);
 
         try {
+            initConnectionFactory();
+
+            applicationContext = new ApplicationContext();
+            if (connectionFactory != null) {
+                applicationContext.registerSingleton(ConnectionFactory.class, connectionFactory);
+            }
+            if (repositoryPackage != null && !repositoryPackage.isBlank()) {
+                applicationContext.scan(controllerPackage.trim(), repositoryPackage.trim());
+            } else {
+                applicationContext.scan(controllerPackage.trim());
+            }
+            LOGGER.info(() -> "Conteneur IoC initialisé : " + applicationContext.getBeanCount() + " beans");
+
             routeRegistry = new ControllerScanner(getClass().getClassLoader()).scan(controllerPackage.trim());
             LOGGER.info(() -> "Routes enregistrées : " + routeRegistry.size());
             for (RouteMapping route : routeRegistry.getAllRoutes()) {
@@ -53,6 +73,31 @@ public class FrontControllerServlet extends HttpServlet {
         } catch (IOException e) {
             throw new ServletException("Impossible de scanner les contrôleurs dans le package " + controllerPackage, e);
         }
+    }
+
+    private void initConnectionFactory() {
+        String dbUrl = getServletContext().getInitParameter("dbUrl");
+        String dbUser = getServletContext().getInitParameter("dbUser");
+        String dbPassword = getServletContext().getInitParameter("dbPassword");
+        String dbDriver = getServletContext().getInitParameter("dbDriver");
+
+        if (dbUrl != null && !dbUrl.isBlank()
+                && dbUser != null && !dbUser.isBlank()
+                && dbDriver != null && !dbDriver.isBlank()) {
+            DatabaseConfig dbConfig = new DatabaseConfig(dbUrl, dbUser,
+                    dbPassword != null ? dbPassword : "", dbDriver);
+            connectionFactory = new ConnectionFactory(dbConfig);
+            getServletContext().setAttribute("connectionFactory", connectionFactory);
+            LOGGER.info(() -> "ConnectionFactory initialisée pour : " + dbUrl);
+        }
+    }
+
+    public ConnectionFactory getConnectionFactory() {
+        return connectionFactory;
+    }
+
+    public ApplicationContext getApplicationContext() {
+        return applicationContext;
     }
 
     @Override
@@ -88,7 +133,10 @@ public class FrontControllerServlet extends HttpServlet {
     private void invokeAndDispatch(HttpServletResponse resp, HttpServletRequest req, RouteMapping route) throws IOException {
         try {
             Method handlerMethod = route.handlerMethod();
-            Object controller = route.controllerClass().getDeclaredConstructor().newInstance();
+            Object controller = applicationContext.getBean(route.controllerClass());
+            if (controller == null) {
+                controller = route.controllerClass().getDeclaredConstructor().newInstance();
+            }
 
             Model model = null;
             boolean hasModelParam = false;

@@ -11,6 +11,11 @@
   </context-param>
 
   <context-param>
+    <param-name>repositoryPackage</param-name>
+    <param-value>com.test.repository</param-value>
+  </context-param>
+
+  <context-param>
     <param-name>viewPrefix</param-name>
     <param-value>/WEB-INF/views/</param-value>
   </context-param>
@@ -18,6 +23,26 @@
   <context-param>
     <param-name>viewSuffix</param-name>
     <param-value>.jsp</param-value>
+  </context-param>
+
+  <context-param>
+    <param-name>dbDriver</param-name>
+    <param-value>com.mysql.cj.jdbc.Driver</param-value>
+  </context-param>
+
+  <context-param>
+    <param-name>dbUrl</param-name>
+    <param-value>jdbc:mysql://localhost:3306/framework_db</param-value>
+  </context-param>
+
+  <context-param>
+    <param-name>dbUser</param-name>
+    <param-value>root</param-value>
+  </context-param>
+
+  <context-param>
+    <param-name>dbPassword</param-name>
+    <param-value></param-value>
   </context-param>
 
   <listener>
