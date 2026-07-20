@@ -1,6 +1,6 @@
 com/test/controllers/EmpController.class
+com/test/controllers/HelloController.class
 com/test/controllers/GoodbyeController.class
 com/test/controllers/UserController.class
-com/test/controllers/HelloController.class
 com/test/controllers/HomeController.class
 com/test/controllers/TestController.class

@@ -10,6 +10,20 @@
     <param-value>com.test.controllers</param-value>
   </context-param>
 
+  <context-param>
+    <param-name>viewPrefix</param-name>
+    <param-value>/WEB-INF/views/</param-value>
+  </context-param>
+
+  <context-param>
+    <param-name>viewSuffix</param-name>
+    <param-value>.jsp</param-value>
+  </context-param>
+
+  <listener>
+    <listener-class>com.framework.listener.ApplicationListener</listener-class>
+  </listener>
+
   <servlet>
     <servlet-name>frontController</servlet-name>
     <servlet-class>framework.FrontControllerServlet</servlet-class>
