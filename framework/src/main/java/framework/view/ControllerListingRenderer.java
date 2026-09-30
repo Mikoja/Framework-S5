@@ -31,6 +31,9 @@ public final class ControllerListingRenderer {
                 } else {
                     writer.write(escapeHtml(route.httpMethod() + " " + route.path()));
                 }
+                if (route.isJson()) {
+                    writer.write(" <em>[JSON]</em>");
+                }
                 writer.write("</li>");
             }
 

@@ -1,3 +1,6 @@
+-- Script SQL pour la base de données framework_db
+-- Sprint 5-2 : Dynamisation des données
+
 CREATE DATABASE IF NOT EXISTS framework_db;
 USE framework_db;
 

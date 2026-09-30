@@ -1,26 +1,31 @@
 package framework;
 
 import framework.ioc.ApplicationContext;
+import framework.json.ReflectiveJsonSerializer;
 import framework.model.Model;
-import framework.model.ModelAndView;
 import framework.persistence.ConnectionFactory;
 import framework.persistence.DatabaseConfig;
+import framework.response.JsonResponseResolver;
+import framework.response.ResponseResolver;
+import framework.response.ResponseResolverRegistry;
+import framework.response.ViewResponseResolver;
 import framework.routing.ControllerScanner;
 import framework.routing.RouteMapping;
 import framework.routing.RouteRegistry;
 import framework.view.ControllerListingRenderer;
+import framework.view.HtmlUtils;
 import framework.view.ViewResolver;
-import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.List;
-import java.util.Map;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class FrontControllerServlet extends HttpServlet {
@@ -31,6 +36,7 @@ public class FrontControllerServlet extends HttpServlet {
     private ViewResolver viewResolver;
     private ApplicationContext applicationContext;
     private ConnectionFactory connectionFactory;
+    private ResponseResolverRegistry responseResolvers;
 
     @Override
     public void init() throws ServletException {
@@ -49,6 +55,11 @@ public class FrontControllerServlet extends HttpServlet {
         String suffix = getServletContext().getInitParameter("viewSuffix");
         viewResolver = new ViewResolver(prefix, suffix);
 
+        responseResolvers = new ResponseResolverRegistry(List.of(
+                new JsonResponseResolver(new ReflectiveJsonSerializer()),
+                new ViewResponseResolver(viewResolver)
+        ));
+
         try {
             initConnectionFactory();
 
@@ -66,9 +77,7 @@ public class FrontControllerServlet extends HttpServlet {
             routeRegistry = new ControllerScanner(getClass().getClassLoader()).scan(controllerPackage.trim());
             LOGGER.info(() -> "Routes enregistrées : " + routeRegistry.size());
             for (RouteMapping route : routeRegistry.getAllRoutes()) {
-                LOGGER.info(() -> route.httpMethod() + " " + route.path()
-                        + " -> " + route.controllerClass().getSimpleName()
-                        + "#" + route.handlerMethod().getName());
+                LOGGER.info(() -> route.toString());
             }
         } catch (IOException e) {
             throw new ServletException("Impossible de scanner les contrôleurs dans le package " + controllerPackage, e);
@@ -105,11 +114,10 @@ public class FrontControllerServlet extends HttpServlet {
         String path = extractPath(req);
         String method = req.getMethod();
 
-        resp.setContentType("text/html; charset=UTF-8");
-
         var route = routeRegistry.find(method, path);
         if (route.isPresent()) {
             if ("GET".equals(method) && "/".equals(path)) {
+                resp.setContentType(ViewResponseResolver.HTML_CONTENT_TYPE);
                 ControllerListingRenderer.render(resp.getWriter(), routeRegistry, req.getContextPath());
                 return;
             }
@@ -130,7 +138,17 @@ public class FrontControllerServlet extends HttpServlet {
         return routeRegistry;
     }
 
+    public ResponseResolverRegistry getResponseResolvers() {
+        return responseResolvers;
+    }
+
+    public ViewResolver getViewResolver() {
+        return viewResolver;
+    }
+
     private void invokeAndDispatch(HttpServletResponse resp, HttpServletRequest req, RouteMapping route) throws IOException {
+        ResponseResolver resolver = responseResolvers.forRoute(route);
+
         try {
             Method handlerMethod = route.handlerMethod();
             Object controller = applicationContext.getBean(route.controllerClass());
@@ -138,94 +156,71 @@ public class FrontControllerServlet extends HttpServlet {
                 controller = route.controllerClass().getDeclaredConstructor().newInstance();
             }
 
-            Model model = null;
-            boolean hasModelParam = false;
+            Model model = findModelParameter(handlerMethod);
 
-            for (Parameter param : handlerMethod.getParameters()) {
-                if (param.getType() == Model.class) {
-                    model = new Model();
-                    hasModelParam = true;
-                    break;
-                }
-            }
+            Object result = model != null
+                    ? handlerMethod.invoke(controller, model)
+                    : handlerMethod.invoke(controller);
 
-            Object result;
-            if (hasModelParam) {
-                result = handlerMethod.invoke(controller, model);
-            } else {
-                result = handlerMethod.invoke(controller);
-            }
-
-            if (result instanceof ModelAndView mav) {
-                String viewName = mav.getViewName();
-                Map<String, Object> mavModel = mav.getModel();
-                dispatchView(resp, req, viewName, mavModel);
-            } else if (result instanceof String viewName) {
-                if (hasModelParam && model != null) {
-                    dispatchView(resp, req, viewName, model.getAttributes());
-                } else {
-                    writeDirectResult(resp, req, route, viewName);
-                }
-            } else {
-                resp.getWriter().write("<p><a href=\"" + escapeHtml(req.getContextPath() + "/") + "\">Accueil</a></p>");
-                resp.getWriter().write("<p>Contrôleur : " + escapeHtml(route.controllerClass().getSimpleName()) + "</p>");
-                resp.getWriter().write("<p>Méthode : " + escapeHtml(handlerMethod.getName()) + "</p>");
-                resp.getWriter().write("<p>URL : " + escapeHtml(route.httpMethod() + " " + route.path()) + "</p>");
-                resp.getWriter().write("<p>Résultat : " + escapeHtml(String.valueOf(result)) + "</p>");
-            }
+            resolver.resolve(req, resp, route, model, result);
         } catch (Exception e) {
-            LOGGER.severe(() -> "Erreur lors de l'invocation de " + route.handlerMethod().getName() + " : " + e.getMessage());
-            resp.getWriter().write("<p>Erreur lors de l'exécution de la méthode : " + escapeHtml(e.getMessage()) + "</p>");
+            Throwable cause = unwrap(e);
+            LOGGER.log(Level.SEVERE,
+                    "Erreur lors de l'invocation de " + route.controllerClass().getSimpleName()
+                            + "#" + route.handlerMethod().getName() + " (" + route.key() + ")", cause);
+            resolver.resolveError(req, resp, route, cause);
         }
     }
 
-    private void dispatchView(HttpServletResponse resp, HttpServletRequest req, String viewName, Map<String, Object> model) throws IOException {
-        try {
-            for (Map.Entry<String, Object> entry : model.entrySet()) {
-                req.setAttribute(entry.getKey(), entry.getValue());
+    /**
+     * @return un modèle vide si l'action déclare un paramètre {@link Model},
+     * {@code null} sinon
+     */
+    private Model findModelParameter(Method handlerMethod) {
+        for (Parameter parameter : handlerMethod.getParameters()) {
+            if (parameter.getType() == Model.class) {
+                return new Model();
             }
-
-            String resolvedPath = viewResolver.resolve(viewName);
-            RequestDispatcher dispatcher = req.getRequestDispatcher(resolvedPath);
-            dispatcher.forward(req, resp);
-        } catch (ServletException e) {
-            LOGGER.severe(() -> "Erreur lors du forward vers la vue : " + e.getMessage());
-            resp.getWriter().write("<p>Erreur lors du dispatch vers la vue : " + escapeHtml(viewName) + "</p>");
         }
+        return null;
     }
 
-    private void writeDirectResult(HttpServletResponse resp, HttpServletRequest req, RouteMapping route, String viewName) throws IOException {
-        resp.getWriter().write("<p><a href=\"" + escapeHtml(req.getContextPath() + "/") + "\">Accueil</a></p>");
-        resp.getWriter().write("<p>Contrôleur : " + escapeHtml(route.controllerClass().getSimpleName()) + "</p>");
-        resp.getWriter().write("<p>Méthode : " + escapeHtml(route.handlerMethod().getName()) + "</p>");
-        resp.getWriter().write("<p>URL : " + escapeHtml(route.httpMethod() + " " + route.path()) + "</p>");
-        resp.getWriter().write("<p>Résultat : " + escapeHtml(viewName) + "</p>");
+    private Throwable unwrap(Exception e) {
+        if (e instanceof InvocationTargetException && e.getCause() != null) {
+            return e.getCause();
+        }
+        return e;
     }
 
     private void writeUnknownUrl(HttpServletResponse resp, HttpServletRequest req, String method, String path) throws IOException {
         resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-        resp.getWriter().write("<p>URL inconnue : " + escapeHtml(method + " " + path) + "</p>");
+        resp.setContentType(ViewResponseResolver.HTML_CONTENT_TYPE);
+        resp.getWriter().write("<p>URL inconnue : " + HtmlUtils.escape(method + " " + path) + "</p>");
         resp.getWriter().write("<p>Voici les URLs disponibles :</p><ul>");
         for (RouteMapping route : routeRegistry.getAllRoutes()) {
             resp.getWriter().write("<li>");
             if ("GET".equals(route.httpMethod())) {
-                resp.getWriter().write("<a href=\"" + escapeHtml(buildUrl(req.getContextPath(), route.path())) + "\">");
-                resp.getWriter().write(escapeHtml(route.httpMethod() + " " + route.path()));
+                resp.getWriter().write("<a href=\"" + HtmlUtils.escape(buildUrl(req.getContextPath(), route.path())) + "\">");
+                resp.getWriter().write(HtmlUtils.escape(route.httpMethod() + " " + route.path()));
                 resp.getWriter().write("</a>");
             } else {
-                resp.getWriter().write(escapeHtml(route.httpMethod() + " " + route.path()));
+                resp.getWriter().write(HtmlUtils.escape(route.httpMethod() + " " + route.path()));
+            }
+            if (route.isJson()) {
+                resp.getWriter().write(" <em>[JSON]</em>");
             }
             resp.getWriter().write("</li>");
         }
         resp.getWriter().write("</ul>");
-        resp.getWriter().write("<p><a href=\"" + escapeHtml(req.getContextPath() + "/") + "\">Accueil</a></p>");
+        resp.getWriter().write("<p><a href=\"" + HtmlUtils.escape(req.getContextPath() + "/") + "\">Accueil</a></p>");
     }
 
     private void writeMethodNotAllowed(HttpServletResponse resp, String method, String path, List<RouteMapping> routes) throws IOException {
         resp.setStatus(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
-        resp.getWriter().write("<p>405 — " + escapeHtml(method + " " + path) + " non autorisé</p><ul>");
+        resp.setContentType(ViewResponseResolver.HTML_CONTENT_TYPE);
+        resp.getWriter().write("<p>405 — " + HtmlUtils.escape(method + " " + path) + " non autorisé</p><ul>");
         for (RouteMapping route : routes) {
-            resp.getWriter().write("<li>" + escapeHtml(route.httpMethod() + " " + route.path()) + "</li>");
+            resp.getWriter().write("<li>" + HtmlUtils.escape(route.httpMethod() + " " + route.path()) + "</li>");
         }
         resp.getWriter().write("</ul>");
     }
@@ -251,12 +246,5 @@ public class FrontControllerServlet extends HttpServlet {
             return base.isEmpty() ? "/" : base + "/";
         }
         return base + path;
-    }
-
-    private String escapeHtml(String value) {
-        return value
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;");
     }
 }
