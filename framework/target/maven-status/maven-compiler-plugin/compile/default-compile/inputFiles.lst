@@ -5,6 +5,7 @@
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/annotations/Repository.java
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/annotations/Get.java
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/ioc/ApplicationContext.java
+/home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/annotations/RequestParam.java
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/annotations/Component.java
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/annotations/Autowired.java
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/response/ResponseResolverRegistry.java
@@ -29,6 +30,7 @@
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/view/ViewResolver.java
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/model/Model.java
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/annotations/Put.java
+/home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/com/sprint/framework/exception/BindingException.java
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/com/framework/util/UtilMethode.java
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/annotations/Post.java
 /home/mikoja/IT-University/Troisieme annee/Mr Naina/framework/framework/src/main/java/framework/view/ControllerListingRenderer.java

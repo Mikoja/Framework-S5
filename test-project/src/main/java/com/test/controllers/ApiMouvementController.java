@@ -1,15 +1,16 @@
 package com.test.controllers;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 import com.test.entity.Mouvement;
 import com.test.repository.MouvementRepository;
+
 import framework.annotations.Autowired;
 import framework.annotations.Controller;
 import framework.annotations.Get;
 import framework.annotations.Json;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Contrôleur d'API REST : chaque méthode renvoie directement la donnée à

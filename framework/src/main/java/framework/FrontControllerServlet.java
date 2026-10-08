@@ -157,10 +157,8 @@ public class FrontControllerServlet extends HttpServlet {
             }
 
             Model model = findModelParameter(handlerMethod);
-
-            Object result = model != null
-                    ? handlerMethod.invoke(controller, model)
-                    : handlerMethod.invoke(controller);
+            Object[] args = resolveArguments(handlerMethod, req);
+            Object result = handlerMethod.invoke(controller, args);
 
             resolver.resolve(req, resp, route, model, result);
         } catch (Exception e) {
@@ -178,8 +176,8 @@ public class FrontControllerServlet extends HttpServlet {
      */
     private Model findModelParameter(Method handlerMethod) {
         for (Parameter parameter : handlerMethod.getParameters()) {
-            if (parameter.getType() == Model.class) {
-                return new Model();
+            if (parameter.getType() == framework.model.Model.class) {
+                return new framework.model.Model();
             }
         }
         return null;
@@ -246,5 +244,131 @@ public class FrontControllerServlet extends HttpServlet {
             return base.isEmpty() ? "/" : base + "/";
         }
         return base + path;
+    }
+
+    private boolean isSimpleType(Class<?> type) {
+        if (type.isPrimitive()) {
+            return true;
+        }
+        return type == String.class
+                || type == Integer.class
+                || type == Long.class
+                || type == Double.class
+                || type == Float.class
+                || type == Short.class
+                || type == Byte.class
+                || type == Boolean.class
+                || type == Character.class;
+    }
+
+    private Object defaultValue(Class<?> type) {
+        if (type == int.class) return 0;
+        if (type == long.class) return 0L;
+        if (type == double.class) return 0.0;
+        if (type == float.class) return 0.0f;
+        if (type == short.class) return (short) 0;
+        if (type == byte.class) return (byte) 0;
+        if (type == boolean.class) return false;
+        if (type == char.class) return '\0';
+        return null;
+    }
+
+    private Object convert(Class<?> type, String value) throws Exception {
+        if (value == null) return null;
+        if (type == String.class) return value;
+        if (type == int.class || type == Integer.class) {
+            return Integer.parseInt(value);
+        }
+        if (type == long.class || type == Long.class) {
+            return Long.parseLong(value);
+        }
+        if (type == double.class || type == Double.class) {
+            return Double.parseDouble(value);
+        }
+        if (type == float.class || type == Float.class) {
+            return Float.parseFloat(value);
+        }
+        if (type == short.class || type == Short.class) {
+            return Short.parseShort(value);
+        }
+        if (type == byte.class || type == Byte.class) {
+            return Byte.parseByte(value);
+        }
+        if (type == boolean.class || type == Boolean.class) {
+            if (value.isBlank()) return Boolean.FALSE;
+            String v = value.toLowerCase();
+            return "true".equals(v) || "1".equals(v) || "on".equals(v) || "yes".equals(v);
+        }
+        if (type == char.class || type == Character.class) {
+            if (value.isEmpty()) return '\0';
+            return value.charAt(0);
+        }
+        return value;
+    }
+
+    public Object[] resolveArguments(Method handlerMethod, HttpServletRequest req) throws Exception {
+        Parameter[] parameters = handlerMethod.getParameters();
+        Object[] args = new Object[parameters.length];
+        for (int i = 0; i < parameters.length; i++) {
+            Parameter parameter = parameters[i];
+            Class<?> type = parameter.getType();
+            if (type == jakarta.servlet.http.HttpServletRequest.class) {
+                args[i] = req;
+                continue;
+            }
+            if (type == framework.model.Model.class) {
+                continue;
+            }
+            if (type == framework.model.ModelAndView.class) {
+                args[i] = new framework.model.ModelAndView("");
+                continue;
+            }
+            if (!isSimpleType(type)) {
+                throw new com.sprint.framework.exception.BindingException("Binding non supporte pour un parametre de type objet : " + type.getName());
+            }
+            String paramName = parameter.getName();
+            boolean required = true;
+            framework.annotations.RequestParam reqParam = parameter.getAnnotation(framework.annotations.RequestParam.class);
+            if (reqParam != null) {
+                paramName = reqParam.value();
+                required = reqParam.required();
+            }
+            String value = req.getParameter(paramName);
+            if (value == null) {
+                if (required) {
+                    throw new com.sprint.framework.exception.BindingException("Parametre requis absent : " + paramName);
+                }
+                args[i] = defaultValue(type);
+                continue;
+            }
+            try {
+                args[i] = convert(type, value);
+            } catch (Exception e) {
+                throw new com.sprint.framework.exception.BindingException("Valeur invalide pour le parametre : " + paramName, e);
+            }
+        }
+        return args;
+    }
+
+    private Object[] mergeModelArg(Object[] args, Model model) {
+        if (args == null || args.length == 0) {
+            return new Object[]{model};
+        }
+        for (int i = 0; i < args.length; i++) {
+            if (args[i] == null) {
+                Parameter[] params = null;
+                return args;
+            }
+        }
+        for (int i = 0; i < args.length; i++) {
+            if (args[i] instanceof framework.model.Model) {
+                args[i] = model;
+                return args;
+            }
+        }
+        Object[] merged = new Object[args.length + 1];
+        System.arraycopy(args, 0, merged, 0, args.length);
+        merged[args.length] = model;
+        return merged;
     }
 }

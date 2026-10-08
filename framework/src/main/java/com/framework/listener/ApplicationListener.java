@@ -19,7 +19,10 @@ public class ApplicationListener implements ServletContextListener {
 
             ServletContext context = sce.getServletContext();
 
-            String pack = context.getInitParameter("controller");
+            String pack = context.getInitParameter("controllerPackage");
+            if (pack == null || pack.isBlank()) {
+                pack = context.getInitParameter("controller");
+            }
 
             HashMap<UtilMethode, Mapping> urlMapping = new HashMap<>();
 
