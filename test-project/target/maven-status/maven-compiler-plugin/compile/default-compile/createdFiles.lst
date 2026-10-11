@@ -5,6 +5,7 @@ com/test/controllers/UserController.class
 com/test/repository/MouvementRepository.class
 com/test/controllers/HomeController.class
 com/test/controllers/TestController.class
+com/test/entity/Employe.class
 com/test/controllers/ApiTestController.class
 com/test/controllers/EmpController.class
 com/test/controllers/ApiMouvementController.class

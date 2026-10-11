@@ -1,5 +1,6 @@
 package framework;
 
+import com.sprint.framework.exception.BindingException;
 import framework.ioc.ApplicationContext;
 import framework.json.ReflectiveJsonSerializer;
 import framework.model.Model;
@@ -21,8 +22,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.util.List;
 import java.util.logging.Level;
@@ -306,6 +309,80 @@ public class FrontControllerServlet extends HttpServlet {
         return value;
     }
 
+    public Object bindObject(Class<?> type, HttpServletRequest request) throws BindingException {
+        Object instance;
+        try {
+            instance = type.getDeclaredConstructor().newInstance();
+        } catch (NoSuchMethodException e) {
+            throw new BindingException("Constructeur sans argument requis pour : " + type.getName(), e);
+        } catch (Exception e) {
+            throw new BindingException("Instanciation impossible pour : " + type.getName(), e);
+        }
+
+        for (Class<?> current = type; current != null && current != Object.class; current = current.getSuperclass()) {
+            for (Field field : current.getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) {
+                    continue;
+                }
+                if (!isSimpleType(field.getType())) {
+                    continue;
+                }
+                String value = request.getParameter(field.getName());
+                if (value == null) {
+                    continue;
+                }
+                Object converted;
+                try {
+                    converted = convert(field.getType(), value);
+                } catch (Exception e) {
+                    throw new BindingException("Valeur invalide pour le champ : " + field.getName(), e);
+                }
+                inject(instance, field, converted);
+            }
+        }
+        return instance;
+    }
+
+    private void inject(Object instance, Field field, Object value) throws BindingException {
+        Method setter = findSetter(instance.getClass(), field.getName(), field.getType());
+        try {
+            if (setter != null) {
+                setter.invoke(instance, value);
+            } else {
+                field.setAccessible(true);
+                field.set(instance, value);
+            }
+        } catch (Exception e) {
+            throw new BindingException("Injection impossible pour le champ : " + field.getName(), e);
+        }
+    }
+
+    private Method findSetter(Class<?> type, String fieldName, Class<?> fieldType) {
+        String setterName = "set" + Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
+        for (Method method : type.getMethods()) {
+            if (!method.getName().equals(setterName) || method.getParameterCount() != 1) {
+                continue;
+            }
+            Class<?> paramType = method.getParameterTypes()[0];
+            if (paramType.equals(fieldType) || paramType.isAssignableFrom(fieldType) || boxed(paramType) == boxed(fieldType)) {
+                return method;
+            }
+        }
+        return null;
+    }
+
+    private Class<?> boxed(Class<?> type) {
+        if (type == int.class) return Integer.class;
+        if (type == long.class) return Long.class;
+        if (type == double.class) return Double.class;
+        if (type == float.class) return Float.class;
+        if (type == short.class) return Short.class;
+        if (type == byte.class) return Byte.class;
+        if (type == boolean.class) return Boolean.class;
+        if (type == char.class) return Character.class;
+        return type;
+    }
+
     public Object[] resolveArguments(Method handlerMethod, HttpServletRequest req) throws Exception {
         Parameter[] parameters = handlerMethod.getParameters();
         Object[] args = new Object[parameters.length];
@@ -324,7 +401,8 @@ public class FrontControllerServlet extends HttpServlet {
                 continue;
             }
             if (!isSimpleType(type)) {
-                throw new com.sprint.framework.exception.BindingException("Binding non supporte pour un parametre de type objet : " + type.getName());
+                args[i] = bindObject(type, req);
+                continue;
             }
             String paramName = parameter.getName();
             boolean required = true;
@@ -336,7 +414,7 @@ public class FrontControllerServlet extends HttpServlet {
             String value = req.getParameter(paramName);
             if (value == null) {
                 if (required) {
-                    throw new com.sprint.framework.exception.BindingException("Parametre requis absent : " + paramName);
+                    throw new BindingException("Parametre requis absent : " + paramName);
                 }
                 args[i] = defaultValue(type);
                 continue;
@@ -344,7 +422,7 @@ public class FrontControllerServlet extends HttpServlet {
             try {
                 args[i] = convert(type, value);
             } catch (Exception e) {
-                throw new com.sprint.framework.exception.BindingException("Valeur invalide pour le parametre : " + paramName, e);
+                throw new BindingException("Valeur invalide pour le parametre : " + paramName, e);
             }
         }
         return args;
