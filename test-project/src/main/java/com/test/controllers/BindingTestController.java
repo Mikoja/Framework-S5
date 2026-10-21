@@ -1,13 +1,14 @@
 package com.test.controllers;
 
+import java.util.Date;
+
 import com.sprint.framework.exception.BindingException;
+
 import framework.annotations.Controller;
 import framework.annotations.Post;
 import framework.annotations.RequestParam;
 import framework.annotations.UrlMapping;
 import jakarta.servlet.http.HttpServletRequest;
-
-import java.util.Date;
 
 @Controller
 public class BindingTestController {

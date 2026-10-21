@@ -45,6 +45,11 @@
     <param-value></param-value>
   </context-param>
 
+  <context-param>
+    <param-name>configFile</param-name>
+    <param-value>framework.properties</param-value>
+  </context-param>
+
   <listener>
     <listener-class>com.framework.listener.ApplicationListener</listener-class>
   </listener>

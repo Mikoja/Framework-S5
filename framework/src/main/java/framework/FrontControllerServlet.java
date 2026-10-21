@@ -1,6 +1,9 @@
 package framework;
 
 import com.sprint.framework.exception.BindingException;
+import framework.config.FrameworkProperties;
+import framework.file.FileStorage;
+import framework.file.MaFile;
 import framework.ioc.ApplicationContext;
 import framework.json.ReflectiveJsonSerializer;
 import framework.model.Model;
@@ -17,11 +20,14 @@ import framework.view.ControllerListingRenderer;
 import framework.view.HtmlUtils;
 import framework.view.ViewResolver;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -31,6 +37,7 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+@MultipartConfig
 public class FrontControllerServlet extends HttpServlet {
 
     private static final Logger LOGGER = Logger.getLogger(FrontControllerServlet.class.getName());
@@ -40,6 +47,7 @@ public class FrontControllerServlet extends HttpServlet {
     private ApplicationContext applicationContext;
     private ConnectionFactory connectionFactory;
     private ResponseResolverRegistry responseResolvers;
+    private FrameworkProperties frameworkProperties;
 
     @Override
     public void init() throws ServletException {
@@ -64,12 +72,14 @@ public class FrontControllerServlet extends HttpServlet {
         ));
 
         try {
+            initFrameworkProperties();
             initConnectionFactory();
 
             applicationContext = new ApplicationContext();
             if (connectionFactory != null) {
                 applicationContext.registerSingleton(ConnectionFactory.class, connectionFactory);
             }
+            initFileStorage();
             if (repositoryPackage != null && !repositoryPackage.isBlank()) {
                 applicationContext.scan(controllerPackage.trim(), repositoryPackage.trim());
             } else {
@@ -85,6 +95,35 @@ public class FrontControllerServlet extends HttpServlet {
         } catch (IOException e) {
             throw new ServletException("Impossible de scanner les contrôleurs dans le package " + controllerPackage, e);
         }
+    }
+
+    private void initFrameworkProperties() throws ServletException {
+        String configFile = getServletContext().getInitParameter("configFile");
+        if (configFile == null || configFile.isBlank()) {
+            return;
+        }
+        try {
+            frameworkProperties = FrameworkProperties.load(configFile.trim());
+        } catch (IOException e) {
+            throw new ServletException("Chargement impossible du fichier de configuration : " + configFile, e);
+        }
+        getServletContext().setAttribute("frameworkProperties", frameworkProperties);
+        LOGGER.info(() -> "Configuration chargée depuis : " + configFile);
+    }
+
+    private void initFileStorage() {
+        if (frameworkProperties == null) {
+            return;
+        }
+        String uploadPath = frameworkProperties.get("upload.path");
+        if (uploadPath != null && !uploadPath.isBlank()) {
+            applicationContext.registerSingleton(FileStorage.class, new FileStorage(uploadPath));
+            LOGGER.info(() -> "FileStorage initialisé avec le chemin : " + uploadPath);
+        }
+    }
+
+    public FrameworkProperties getFrameworkProperties() {
+        return frameworkProperties;
     }
 
     private void initConnectionFactory() {
@@ -324,7 +363,19 @@ public class FrontControllerServlet extends HttpServlet {
                 if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) {
                     continue;
                 }
-                if (!isSimpleType(field.getType())) {
+                if (!isSimpleType(field.getType()) && field.getType() != MaFile.class) {
+                    continue;
+                }
+                if (field.getType() == MaFile.class) {
+                    MaFile file;
+                    try {
+                        file = findFile(request, field.getName());
+                    } catch (Exception e) {
+                        throw new BindingException("Lecture du fichier impossible pour le champ : " + field.getName(), e);
+                    }
+                    if (file != null) {
+                        inject(instance, field, file);
+                    }
                     continue;
                 }
                 String value = request.getParameter(field.getName());
@@ -400,6 +451,10 @@ public class FrontControllerServlet extends HttpServlet {
                 args[i] = new framework.model.ModelAndView("");
                 continue;
             }
+            if (type == MaFile.class) {
+                args[i] = resolveFile(req, parameter);
+                continue;
+            }
             if (!isSimpleType(type)) {
                 args[i] = bindObject(type, req);
                 continue;
@@ -426,6 +481,41 @@ public class FrontControllerServlet extends HttpServlet {
             }
         }
         return args;
+    }
+
+    private MaFile resolveFile(HttpServletRequest req, Parameter parameter) throws Exception {
+        String name = parameter.getName();
+        boolean required = true;
+        framework.annotations.RequestParam reqParam = parameter.getAnnotation(framework.annotations.RequestParam.class);
+        if (reqParam != null) {
+            name = reqParam.value();
+            required = reqParam.required();
+        }
+        MaFile file = findFile(req, name);
+        if (file == null && required) {
+            throw new BindingException("Fichier requis absent : " + name);
+        }
+        return file;
+    }
+
+    private MaFile findFile(HttpServletRequest req, String name) throws Exception {
+        if (!isMultipart(req)) {
+            return null;
+        }
+        for (Part part : req.getParts()) {
+            String fileName = part.getSubmittedFileName();
+            if (name.equals(part.getName()) && fileName != null && !fileName.isEmpty()) {
+                try (InputStream in = part.getInputStream()) {
+                    return new MaFile(fileName, in.readAllBytes());
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isMultipart(HttpServletRequest req) {
+        String contentType = req.getContentType();
+        return contentType != null && contentType.toLowerCase().startsWith("multipart/form-data");
     }
 
     private Object[] mergeModelArg(Object[] args, Model model) {

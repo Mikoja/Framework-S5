@@ -4,7 +4,6 @@ framework/persistence/ConnectionFactory.class
 framework/view/ViewResolver.class
 framework/annotations/Json.class
 framework/json/JsonMappingException.class
-framework/FrontControllerServlet.class
 framework/annotations/Controller.class
 framework/response/ResponseResolver.class
 framework/response/ResponseResolverRegistry.class
