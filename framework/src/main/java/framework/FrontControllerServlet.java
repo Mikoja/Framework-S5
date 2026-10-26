@@ -9,6 +9,8 @@ import framework.json.ReflectiveJsonSerializer;
 import framework.model.Model;
 import framework.persistence.ConnectionFactory;
 import framework.persistence.DatabaseConfig;
+import framework.session.Session;
+import framework.session.SessionManager;
 import framework.response.JsonResponseResolver;
 import framework.response.ResponseResolver;
 import framework.response.ResponseResolverRegistry;
@@ -76,6 +78,7 @@ public class FrontControllerServlet extends HttpServlet {
             initConnectionFactory();
 
             applicationContext = new ApplicationContext();
+            applicationContext.registerSingleton(SessionManager.class, new SessionManager());
             if (connectionFactory != null) {
                 applicationContext.registerSingleton(ConnectionFactory.class, connectionFactory);
             }
@@ -442,6 +445,11 @@ public class FrontControllerServlet extends HttpServlet {
             Class<?> type = parameter.getType();
             if (type == jakarta.servlet.http.HttpServletRequest.class) {
                 args[i] = req;
+                continue;
+            }
+            if (type == Session.class) {
+                SessionManager sessionManager = applicationContext.getBean(SessionManager.class);
+                args[i] = sessionManager.getSession(req);
                 continue;
             }
             if (type == framework.model.Model.class) {

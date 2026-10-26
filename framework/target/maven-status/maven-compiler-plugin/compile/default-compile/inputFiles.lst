@@ -30,8 +30,10 @@
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/persistence/DatabaseConfig.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/file/FileStorage.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/routing/RouteRegistry.java
+/home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/session/Session.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/model/ModelAndView.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/annotations/Repository.java
+/home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/session/SessionManager.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/FrontControllerServlet.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/annotations/Put.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/config/FrameworkProperties.java
