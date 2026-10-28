@@ -11,6 +11,8 @@ import framework.persistence.ConnectionFactory;
 import framework.persistence.DatabaseConfig;
 import framework.session.Session;
 import framework.session.SessionManager;
+import framework.annotations.Auth;
+import framework.annotations.Authenticated;
 import framework.response.JsonResponseResolver;
 import framework.response.ResponseResolver;
 import framework.response.ResponseResolverRegistry;
@@ -50,6 +52,7 @@ public class FrontControllerServlet extends HttpServlet {
     private ConnectionFactory connectionFactory;
     private ResponseResolverRegistry responseResolvers;
     private FrameworkProperties frameworkProperties;
+    private String authSessionKey;
 
     @Override
     public void init() throws ServletException {
@@ -67,6 +70,24 @@ public class FrontControllerServlet extends HttpServlet {
         String prefix = getServletContext().getInitParameter("viewPrefix");
         String suffix = getServletContext().getInitParameter("viewSuffix");
         viewResolver = new ViewResolver(prefix, suffix);
+
+        authSessionKey = getInitParameter("authSessionKey");
+        if (authSessionKey == null || authSessionKey.isBlank()) {
+            authSessionKey = getInitParameter("authKey");
+        }
+        if (authSessionKey == null || authSessionKey.isBlank()) {
+            authSessionKey = getServletContext().getInitParameter("authSessionKey");
+        }
+        if (authSessionKey == null || authSessionKey.isBlank()) {
+            authSessionKey = getServletContext().getInitParameter("authKey");
+        }
+        if (authSessionKey == null || authSessionKey.isBlank()) {
+            authSessionKey = getServletContext().getInitParameter("auth.session.key");
+        }
+        if (authSessionKey == null || authSessionKey.isBlank()) {
+            authSessionKey = "auth";
+        }
+        getServletContext().setAttribute("authSessionKey", authSessionKey);
 
         responseResolvers = new ResponseResolverRegistry(List.of(
                 new JsonResponseResolver(new ReflectiveJsonSerializer()),
@@ -196,6 +217,15 @@ public class FrontControllerServlet extends HttpServlet {
 
         try {
             Method handlerMethod = route.handlerMethod();
+            if (route.requiresAuth() || handlerMethod.isAnnotationPresent(Auth.class) || handlerMethod.isAnnotationPresent(Authenticated.class)) {
+                if (!isAuthenticated(req)) {
+                    resp.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    resp.setContentType(ViewResponseResolver.HTML_CONTENT_TYPE);
+                    resp.getWriter().write("<p>Non autorisé</p>");
+                    return;
+                }
+            }
+
             Object controller = applicationContext.getBean(route.controllerClass());
             if (controller == null) {
                 controller = route.controllerClass().getDeclaredConstructor().newInstance();
@@ -213,6 +243,67 @@ public class FrontControllerServlet extends HttpServlet {
                             + "#" + route.handlerMethod().getName() + " (" + route.key() + ")", cause);
             resolver.resolveError(req, resp, route, cause);
         }
+    }
+
+    private boolean isAuthenticated(HttpServletRequest req) {
+        String key = authSessionKey;
+        if (key == null || key.isBlank()) {
+            key = getServletContext().getInitParameter("authSessionKey");
+            if (key == null || key.isBlank()) {
+                key = getServletContext().getInitParameter("authKey");
+            }
+        }
+        if (key == null || key.isBlank()) {
+            key = "auth";
+        }
+        SessionManager sessionManager = null;
+        if (applicationContext != null) {
+            sessionManager = applicationContext.getBean(SessionManager.class);
+        }
+        if (sessionManager != null) {
+            try {
+                Session session = sessionManager.getSession(req);
+                if (session != null) {
+                    Object val = session.getAttribute(key);
+                    if (val != null) {
+                        if (val instanceof Boolean) {
+                            return (Boolean) val;
+                        }
+                        return true;
+                    }
+                    Object val2 = session.getAttribute("user");
+                    if (val2 != null) return true;
+                    Object val3 = session.getAttribute("connected");
+                    if (val3 != null) return true;
+                    Object val4 = session.getAttribute("isConnected");
+                    if (val4 != null) {
+                        if (val4 instanceof Boolean) return (Boolean) val4;
+                        return true;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        Object attr = req.getSession().getAttribute(key);
+        if (attr != null) {
+            if (attr instanceof Boolean) {
+                return (Boolean) attr;
+            }
+            return true;
+        }
+        Object a = req.getSession().getAttribute("user");
+        if (a != null) return true;
+        Object b = req.getSession().getAttribute("connected");
+        if (b != null) {
+            if (b instanceof Boolean) return (Boolean) b;
+            return true;
+        }
+        Object c = req.getSession().getAttribute("isConnected");
+        if (c != null) {
+            if (c instanceof Boolean) return (Boolean) c;
+            return true;
+        }
+        return false;
     }
 
     /**

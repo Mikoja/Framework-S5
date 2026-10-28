@@ -1,16 +1,11 @@
 package framework.routing;
 
+import framework.annotations.Auth;
+import framework.annotations.Authenticated;
 import framework.annotations.Json;
 
 import java.lang.reflect.Method;
 
-/**
- * Métadonnées d'une route.
- *
- * <p>Le {@link Json} éventuel porté par l'action ou par le contrôleur est
- * exposé ici sous forme de méthodes dérivées : le système d'URLmapping reste
- * inchangé, l'annotation ne sert qu'à sélectionner la stratégie de réponse.</p>
- */
 public record RouteMapping(
         String httpMethod,
         String path,
@@ -21,7 +16,6 @@ public record RouteMapping(
         return httpMethod + ":" + path;
     }
 
-    /** @return le {@link Json} de l'action ou du contrôleur, {@code null} si la route renvoie une vue */
     public Json json() {
         Json onMethod = handlerMethod.getAnnotation(Json.class);
         if (onMethod != null) {
@@ -32,6 +26,11 @@ public record RouteMapping(
 
     public boolean isJson() {
         return json() != null;
+    }
+
+    public boolean requiresAuth() {
+        return handlerMethod.isAnnotationPresent(Auth.class)
+                || handlerMethod.isAnnotationPresent(Authenticated.class);
     }
 
     @Override

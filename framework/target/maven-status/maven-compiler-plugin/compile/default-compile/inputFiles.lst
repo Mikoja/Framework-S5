@@ -1,4 +1,5 @@
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/ioc/ApplicationContext.java
+/home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/annotations/Authenticated.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/annotations/Get.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/com/framework/listener/ApplicationListener.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/response/ViewResponseResolver.java
@@ -31,6 +32,7 @@
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/file/FileStorage.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/routing/RouteRegistry.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/session/Session.java
+/home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/annotations/Auth.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/model/ModelAndView.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/annotations/Repository.java
 /home/mikoja/IT-University/Troisieme annee/S5/Mr Naina/framework/framework/src/main/java/framework/session/SessionManager.java
